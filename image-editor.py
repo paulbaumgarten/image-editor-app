@@ -63,13 +63,22 @@ class AppWindow():
         self.settings['default_folder'] = os.curdir
         self.load_settings()
         self.history = []
-        self.crop_tool_on = False
-        self.crop_tool_started = False
+        self.active_tool = ""
+        self.active_tool_data = {}
         # Key bindings
         self.window.bind('<Left>', self.file_previous)
         self.window.bind('<Right>', self.file_next)
         self.window.bind_all('<Control-Key-z>', self.undo)
         self.window.bind_all('<Control-Key-s>', self.file_save)
+        self.window.bind('<Control-Key-r>', self.rotate_right)
+        self.window.bind('<Control-Key-c>', self.crop)
+        self.window.bind('<Key-a>', self.crop)
+        self.window.bind('<Key-s>', self.crop)
+        self.window.bind('<Key-d>', self.crop)
+        self.window.bind('<Key-w>', self.crop)
+        self.window.bind('<Key-plus>', self.crop)
+        self.window.bind('<Key-minus>', self.crop)
+        self.window.bind('<Return>', self.crop)
         # Open most recent file
         if "most_recent" in self.settings:
             self.file_open(self.settings['most_recent'])
@@ -305,13 +314,15 @@ class AppWindow():
     def resize(self):
         messagebox.showerror("Sorry", "Feature not yet implemented :-/")
 
-    def crop(self, event=None):
+    def crop_attempt_1(self, event=None): # Mouse control
         # Default crop is 1:1 ratio
         if 'crop_ratio' in self.settings:
             ratio = self.settings['crop_ratio']
+        elif 'ratio' in self.active_tool_data:
+            ratio = self.active_tool_data['ratio']
         else:
             ratio = 1.0
-        if event is not None and self.crop_tool_on:
+        if event is not None and self.active_tool == "crop":
             left_edge = self.properties['offset'][0]
             right_edge = self.properties['offset'][0] + self.properties['scaled_size'][0]
             top_edge = self.properties['offset'][1]
@@ -319,37 +330,140 @@ class AppWindow():
             if str(event.type) == "ButtonPress":
                 print('ButtonPress',event.x, event.y)
                 self.add_to_history()
-                self.crop_start_x = int((max(min(event.x, right_edge), left_edge) - left_edge) * self.properties['scale_ratio'])
-                self.crop_start_y = int((max(min(event.y, bottom_edge), top_edge) - top_edge) * self.properties['scale_ratio'])
-                draw = ImageDraw.Draw(self.image)
-                draw.rectangle((0,0,self.properties['dimensions'][0],self.crop_start_y-1), fill="#000000")
-                draw.rectangle((0,0,self.crop_start_x-1,self.properties['dimensions'][1]), fill="#000000")
+                self.active_tool_data['crop_start_x'] = int((max(min(event.x, right_edge), left_edge) - left_edge) * self.properties['scale_ratio'])
+                self.active_tool_data['crop_start_y'] = int((max(min(event.y, bottom_edge), top_edge) - top_edge) * self.properties['scale_ratio'])
+                draw = ImageDraw.Draw(self.image, 'RGBA')
+                draw.rectangle((0,0,self.properties['dimensions'][0],self.active_tool_data['crop_start_y']-1), fill="#00000080")
+                draw.rectangle((0,0,self.active_tool_data['crop_start_x']-1,self.properties['dimensions'][1]), fill="#00000080")
                 self.dirty = True
-                self.crop_tool_started = True
-            elif str(event.type) == "ButtonRelease" and self.crop_tool_started:
+                self.active_tool_data['ButtonPress'] = True
+                print(self.active_tool_data)
+            elif str(event.type) == "ButtonRelease" and 'ButtonPress' in self.active_tool_data:
                 print('ButtonRelease',event.x, event.y)
-                self.crop_end_x = int((max(min(event.x, right_edge), left_edge) - left_edge) * self.properties['scale_ratio'])
-                self.crop_end_y = int((max(min(event.y, bottom_edge), top_edge) - top_edge) * self.properties['scale_ratio'])
-                w = self.crop_end_x - self.crop_start_x
-                h = self.crop_end_y - self.crop_start_y
+                self.active_tool_data['crop_end_x'] = int((max(min(event.x, right_edge), left_edge) - left_edge) * self.properties['scale_ratio'])
+                self.active_tool_data['crop_end_y'] = int((max(min(event.y, bottom_edge), top_edge) - top_edge) * self.properties['scale_ratio'])
+                print(self.active_tool_data)
+                w = self.active_tool_data['crop_end_x'] - self.active_tool_data['crop_start_x']
+                h = self.active_tool_data['crop_end_y'] - self.active_tool_data['crop_start_y']
                 if w > h:
-                    self.crop_end_y = self.crop_start_y + int(w * ratio)
+                    self.active_tool_data['crop_end_y'] = self.active_tool_data['crop_start_y'] + int(w * ratio)
                 else:
-                    self.crop_end_x = self.crop_start_x + int(h / ratio)
-#                draw = ImageDraw.Draw(self.image)
-#                draw.rectangle((self.crop_start_x, self.crop_start_y, self.crop_end_x, self.crop_end_y), width=3, outline="#ffff00")
-                self.image = self.image.crop((self.crop_start_x, self.crop_start_y, self.crop_end_x, self.crop_end_y))
-                self.crop_tool_on = False
-                self.crop_tool_started = False
+                    self.active_tool_data['crop_end_x'] = self.active_tool_data['crop_start_x'] + int(h / ratio)
+                print(self.active_tool_data)
+                if self.active_tool_data['crop_start_x'] < self.active_tool_data['crop_end_x'] and self.active_tool_data['crop_start_y'] < self.active_tool_data['crop_end_y']:
+                    print("Cropping...")
+                    self.image = self.image.crop((self.active_tool_data['crop_start_x'], 
+                        self.active_tool_data['crop_start_y'], 
+                        self.active_tool_data['crop_end_x'], 
+                        self.active_tool_data['crop_end_y']))
+                else:
+                    print("Zero area selected, aborting crop...")
+                    self.undo()
+                self.active_tool = ""
+                self.active_tool_data = {}
                 self.window.bind('<Button-1>', None)
                 self.window.bind('<ButtonRelease-1>', None)
+            print("Showing image...")
             self.show_image()
         elif event is None:
             print('Crop button')
             self.window.bind('<Button-1>', self.crop)
             self.window.bind('<ButtonRelease-1>', self.crop)
-            self.crop_tool_on = True
-    
+            self.active_tool = "crop"
+            self.active_tool_data = {}
+
+    def crop(self, event=None): # Keyboard control
+        def add_crop_mask(image, x,y,w,h): # Coordinates as per original image not the scaled image on display
+            print(x,y,w,h, image.size[0], image.size[1])
+            draw = ImageDraw.Draw(image, 'RGBA')
+            draw.rectangle((0,0,image.size[0],y), fill="#00000080") # Top
+            draw.rectangle((0,y,x,y+h), fill="#00000080") # Left
+            draw.rectangle((x+w,y,image.size[0],y+h), fill="#00000080") # Right
+            draw.rectangle((0,y+h,image.size[0],image.size[1]), fill="#00000080") # Bottom
+        # Default crop is 1:1 ratio 
+        if 'crop_ratio' in self.settings:
+            ratio = self.settings['crop_ratio']
+        elif 'ratio' in self.active_tool_data:
+            ratio = self.active_tool_data['ratio']
+        else:
+            ratio = 1.0 # One x for every one y. Ratio > 1 are wider, ratio < 1 are taller
+        # How many pixels to move for each key press
+        if 'crop_step' in self.settings:
+            step = self.settings['crop_step']
+        elif 'step' in self.active_tool_data:
+            step = self.active_tool_data['step']
+        else:
+            step = int(self.image.size[0]/20.0)
+        # Crop button has been pressed on toolbar
+        # or Control-C key combination (event.state==4 is Control)
+        if event is None or (str(event.type)=="KeyPress" and event.state==4 and event.keysym=="c"): 
+            print('Crop button')
+            self.add_to_history()
+            self.dirty = True
+            if self.image.size[0] > self.image.size[1]: # Image is landscape orientation
+                y = 0
+                h = self.image.size[1] # Full height
+                w = int( h * ratio )
+                x = int(self.image.size[0] / 2) - int(w/2)
+            else: # Image is portrait orientation
+                x = 0
+                w = self.image.size[0] # Full width
+                h = int( w * ratio )
+                y = int(self.image.size[1] / 2) - int(h/2)
+            self.active_tool = "crop"
+            self.active_tool_data = {'x':x, 'y':y, 'w':w, 'h':h}
+            self.crop_tool_original_image = self.image.copy()
+            add_crop_mask(self.image, self.active_tool_data['x'],self.active_tool_data['y'],self.active_tool_data['w'],self.active_tool_data['h'])
+            self.show_image()
+        elif event is not None and self.active_tool == "crop": # Key press
+            print(event)
+            if str(event.type) == "KeyPress" and event.char == 'a': # Move left
+                if self.active_tool_data['x'] > step:
+                    self.active_tool_data['x'] -= step
+                else:
+                    self.active_tool_data['x'] = 0
+                self.image = self.crop_tool_original_image.copy()
+                add_crop_mask(self.image, self.active_tool_data['x'],self.active_tool_data['y'],self.active_tool_data['w'],self.active_tool_data['h'])
+            elif str(event.type) == "KeyPress" and event.char == 's': # Move down
+                if self.active_tool_data['y']+self.active_tool_data['h']+step < self.image.size[1]:
+                    self.active_tool_data['y'] += step
+                else:
+                    self.active_tool_data['y'] = self.image.size[1] - self.active_tool_data['h']
+                self.image = self.crop_tool_original_image.copy()
+                add_crop_mask(self.image, self.active_tool_data['x'],self.active_tool_data['y'],self.active_tool_data['w'],self.active_tool_data['h'])
+            elif str(event.type) == "KeyPress" and event.char == 'd': # Move right
+                if self.active_tool_data['x']+self.active_tool_data['w']+step < self.image.size[0]:
+                    self.active_tool_data['x'] += step
+                else:
+                    self.active_tool_data['x'] = self.image.size[0] - self.active_tool_data['w']
+                self.image = self.crop_tool_original_image.copy()
+                add_crop_mask(self.image, self.active_tool_data['x'],self.active_tool_data['y'],self.active_tool_data['w'],self.active_tool_data['h'])
+            elif str(event.type) == "KeyPress" and event.char == 'w': # Move up
+                if self.active_tool_data['y'] > step:
+                    self.active_tool_data['y'] -= step
+                else:
+                    self.active_tool_data['y'] = 0
+                self.image = self.crop_tool_original_image.copy()
+                add_crop_mask(self.image, self.active_tool_data['x'],self.active_tool_data['y'],self.active_tool_data['w'],self.active_tool_data['h'])
+            elif str(event.type) == "KeyPress" and event.keysym == 'plus': # Increase selection size
+                if self.active_tool_data['w'] < self.image.size[0] and self.active_tool_data['h'] < self.image.size[1]:
+                    self.active_tool_data['w'] += step
+                    self.active_tool_data['h'] = self.active_tool_data['w'] / ratio
+                self.image = self.crop_tool_original_image.copy()
+                add_crop_mask(self.image, self.active_tool_data['x'],self.active_tool_data['y'],self.active_tool_data['w'],self.active_tool_data['h'])
+            elif str(event.type) == "KeyPress" and event.keysym == 'minus': # Decrease selection size
+                if self.active_tool_data['w'] > 2*step and self.active_tool_data['h'] > 2*step:
+                    self.active_tool_data['w'] -= step
+                    self.active_tool_data['h'] = self.active_tool_data['w'] / ratio
+                self.image = self.crop_tool_original_image.copy()
+                add_crop_mask(self.image, self.active_tool_data['x'],self.active_tool_data['y'],self.active_tool_data['w'],self.active_tool_data['h'])
+            elif str(event.type) == "KeyPress" and event.keysym == "Return": # Finalise the cropping
+                self.image = self.crop_tool_original_image.copy()
+                self.image = self.image.crop((self.active_tool_data['x'],self.active_tool_data['y'],self.active_tool_data['x']+self.active_tool_data['w'],self.active_tool_data['y']+self.active_tool_data['h']))
+                self.active_tool = ""
+                self.active_tool_data = {}
+            self.show_image()
+
     def rotate_left(self):
         if self.image is not None:
             self.add_to_history()
@@ -357,7 +471,7 @@ class AppWindow():
             self.dirty = True
             self.show_image()
 
-    def rotate_right(self):
+    def rotate_right(self, event=None):
         if self.image is not None:
             self.add_to_history()
             self.image = self.image.rotate(-90, expand=True)
@@ -392,6 +506,8 @@ class AppWindow():
         if len(self.history) > 0:
             self.image = self.history.pop(-1)
             self.show_image()
+        if len(self.history) == 0:
+            self.dirty = False
 
     def add_to_history(self):
         self.history.append(self.image.copy())
