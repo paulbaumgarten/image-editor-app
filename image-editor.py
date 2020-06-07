@@ -105,23 +105,28 @@ class AppWindow():
             pickle.dump(self.settings, f)
     
     def load_assets(self):
+        try:
+            # PyInstaller creates a temp folder and stores path in _MEIPASS
+            base_path = sys._MEIPASS
+        except Exception:
+            base_path = os.path.abspath(".")
         self.icons = {
-            "previous" : tk.PhotoImage(file="assets/icons8-back-50.png"),
-            "crop" : tk.PhotoImage(file="assets/icons8-crop-50.png"),
-            "delete" : tk.PhotoImage(file="assets/icons8-delete-bin-50.png"),
-            "erase" : tk.PhotoImage(file="assets/icons8-erase-50.png"),
-            "fill-color" : tk.PhotoImage(file="assets/icons8-fill-color-50.png"),
-            "next" : tk.PhotoImage(file="assets/icons8-forward-50.png"),
-            "line" : tk.PhotoImage(file="assets/icons8-line-50.png"),
-            "ellipse" : tk.PhotoImage(file="assets/icons8-oval-50.png"),
-            "paint" : tk.PhotoImage(file="assets/icons8-paint-palette-50.png"),
-            "pen" : tk.PhotoImage(file="assets/icons8-pen-50.png"),
-            "rectangle" : tk.PhotoImage(file="assets/icons8-rectangular-50.png"),
-            "resize" : tk.PhotoImage(file="assets/icons8-resize-50.png"),
-            "save" : tk.PhotoImage(file="assets/icons8-save-50.png"),
-            "text" : tk.PhotoImage(file="assets/icons8-text-box-50.png"),
-            "rotate-left" : tk.PhotoImage(file="assets/icons8-rotate-left-50.png"),
-            "rotate-right" : tk.PhotoImage(file="assets/icons8-rotate-right-50.png")
+            "previous" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-back-50.png")),
+            "crop" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-crop-50.png")),
+            "delete" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-delete-bin-50.png")),
+            "erase" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-erase-50.png")),
+            "fill-color" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-fill-color-50.png")),
+            "next" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-forward-50.png")),
+            "line" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-line-50.png")),
+            "ellipse" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-oval-50.png")),
+            "paint" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-paint-palette-50.png")),
+            "pen" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-pen-50.png")),
+            "rectangle" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-rectangular-50.png")),
+            "resize" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-resize-50.png")),
+            "save" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-save-50.png")),
+            "text" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-text-box-50.png")),
+            "rotate-left" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-rotate-left-50.png")),
+            "rotate-right" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-rotate-right-50.png"))
         }
 
     def generate_toolbar(self, target):
@@ -373,6 +378,8 @@ class AppWindow():
             self.active_tool_data = {}
 
     def crop(self, event=None): # Keyboard control
+        if self.image is None:
+            return False
         def add_crop_mask(image, x,y,w,h): # Coordinates as per original image not the scaled image on display
             print(x,y,w,h, image.size[0], image.size[1])
             draw = ImageDraw.Draw(image, 'RGBA')
