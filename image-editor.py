@@ -42,6 +42,10 @@ class AppWindow():
         self.toolsettings_frame = tk.Frame(self.window)
         self.toolsettings_frame.place(x=0, y=dimensions[1]-100, width=dimensions[0]-216, height=100)
         self.toolsettings_frame.config(background=TOOLS_BACKGROUND)
+        self.active_tool_text = tk.Label(self.toolsettings_frame, text="", font=("Arial",20), bg=TOOLS_BACKGROUND)
+        self.active_tool_text.place(x=70,y=0)
+        self.dirty_text = tk.Label(self.toolsettings_frame, text="", font=("Arial",20), bg=TOOLS_BACKGROUND, foreground="red")
+        self.dirty_text.place(x=930,y=00)
         self.bottombar_frame = tk.Frame(self.window)
         self.bottombar_frame.place(x=dimensions[0]-216, y=dimensions[1]-100, width=216, height=54)
         self.bottombar_frame.config(background=TOOLS_BACKGROUND)
@@ -62,7 +66,7 @@ class AppWindow():
         # Initalise working variables...
         self.filename = ""
         self.fileopen = False
-        self.dirty = False
+        self.__dirty = False
         self.image = None       # The PIL image object
         self.imageTk = None     # The PIL imagetk object (note: self.image will be authoritative)
         self.properties = {}    # Information about the open file
@@ -77,6 +81,7 @@ class AppWindow():
         self.window.bind('<Right>', self.keyboard_handler)
         self.window.bind('<Control-Key-Left>', self.keyboard_handler)
         self.window.bind('<Control-Key-Right>', self.keyboard_handler)
+        self.window.bind('<Control-Key-r>', self.keyboard_handler)
         self.window.bind('<Control-Key-z>', self.keyboard_handler)
         self.window.bind('<Control-Key-s>', self.keyboard_handler)
         self.window.bind('<Control-Key-q>', self.keyboard_handler)
@@ -87,10 +92,29 @@ class AppWindow():
         self.window.bind('<Key-plus>', self.keyboard_handler)
         self.window.bind('<Key-minus>', self.keyboard_handler)
         self.window.bind('<Return>', self.keyboard_handler)
+        # self.window.bind_all('<Key>', self.keyboard_test)
         # Open most recent file
         if "most_recent" in self.settings:
             self.file_open(self.settings['most_recent'])
-    
+
+    def is_dirty(self, val=None):
+        if val is not None:
+            self.__dirty = val
+            if val:
+                self.dirty_text.config(text="dirty")
+            else:
+                self.dirty_text.config(text="          ")
+        return self.__dirty
+
+    def keyboard_test(self, event):
+        if event.char == event.keysym:
+            msg = 'Normal Key %r' % event.char
+        elif len(event.char) == 1:
+            msg = 'Punctuation Key %r (%r)' % (event.keysym, event.char)
+        else:
+            msg = 'Special Key %r' % event.keysym
+        print(event, msg)        
+
     def keyboard_handler(self, event):
         # List of .keysym names @ https://anzeljg.github.io/rin2/book2/2405/docs/tkinter/key-names.html
         # Is Control key pressed?
@@ -106,6 +130,8 @@ class AppWindow():
                 self.file_previous()
             elif str(event.type) == "KeyPress" and event.keysym == "Right" and ctrl:
                 self.rotate_right()
+            elif str(event.type) == "KeyPress" and event.keysym == "r" and ctrl:
+                self.rotate_right()
             elif str(event.type) == "KeyPress" and event.keysym == "Right":
                 self.file_next()
             elif str(event.type) == "KeyPress" and event.keysym == "c" and ctrl:
@@ -115,19 +141,22 @@ class AppWindow():
             elif str(event.type) == "KeyPress" and event.keysym == "z" and ctrl:
                 self.undo()
             elif str(event.type) == "KeyPress" and event.keysym == "q" and ctrl:
-                if self.dirty:
+                if self.is_dirty():
                     if messagebox.askyesno("Changes made", f"Save changes to {self.filename} before closing?"):
                         self.file_save()
                 quit()
             
     def get_images_in_folder(self, folder):
-        files = os.listdir(folder)
-        image_files = []
-        for f in files:
-            extension = f.split(".")[-1]
-            if extension.lower() in SUPPORTED_IMAGE_EXTENSIONS:
-                image_files.append(f)
-        return image_files
+        try:
+            files = os.listdir(folder)
+            image_files = []
+            for f in files:
+                extension = f.split(".")[-1]
+                if extension.lower() in SUPPORTED_IMAGE_EXTENSIONS:
+                    image_files.append(f)
+            return image_files
+        except:
+            return []
 
     def load_settings(self):
         if os.path.exists(SETTINGS_FILE):
@@ -227,8 +256,8 @@ class AppWindow():
         if self.filename != "":
             filename_parts = self.filename.split("/")
             filename_display = filename_parts[ -1 ]
-            self.properties_filename_label = tk.Label(self.properties_frame, text=f"File: {filename_display}                              ", font=('Arial', 12), bg=TOOLS_BACKGROUND, justify=tk.LEFT) 
-            self.properties_dimensions_label = tk.Label(self.properties_frame, text=f"Dimensions: {self.properties['dimensions'][0]} x {self.properties['dimensions'][1]}, Mode: {self.properties['mode']}                    ", font=('Arial', 12), bg=TOOLS_BACKGROUND, justify=tk.LEFT) 
+            self.properties_filename_label = tk.Label(self.properties_frame, text=f"{filename_display}                              ", font=('Arial', 12), bg=TOOLS_BACKGROUND, justify=tk.LEFT) 
+            self.properties_dimensions_label = tk.Label(self.properties_frame, text=f"{self.properties['dimensions'][0]} x {self.properties['dimensions'][1]} {self.properties['mode']}                    ", font=('Arial', 12), bg=TOOLS_BACKGROUND, justify=tk.LEFT) 
             self.properties_filename_label.place(x=0,y=0)
             self.properties_dimensions_label.place(x=0,y=20)
             self.window.title("pbTools image editor - "+filename_display)
@@ -282,11 +311,11 @@ class AppWindow():
             self.show_properties()
             self.show_image()
             self.history = []
-            self.dirty = False
+            self.is_dirty(False)
             self.fileopen = True
     
     def file_save(self, event=None):
-        if self.dirty:
+        if self.is_dirty():
             parts = self.filename.split(".")
             if 'convert_all_to' in self.settings:
                 ext = self.settings['convert_all_to']
@@ -294,16 +323,16 @@ class AppWindow():
             new_filename = ".".join(parts)
             if parts[-1].lower() in ("jpg", "jpeg"):
                 self.image.save(new_filename,"jpeg")
-                self.dirty = False
+                self.is_dirty(False)
             elif parts[-1].lower() in ("png"):
                 self.image.save(new_filename,"png")
-                self.dirty = False
+                self.is_dirty(False)
 
     def file_saveas(self):
         filename = filedialog.asksaveasfilename(initialdir=self.default_folder, title="Select file", filetypes=ALLOWED_FILES)
 
     def file_next(self, event=None): # The event is received if executed via the key binding
-        if self.dirty:
+        if self.is_dirty():
             if messagebox.askyesno("Changes made", f"Save changes to {self.filename}?"):
                 self.file_save()
         images_in_folder = self.get_images_in_folder(self.settings['default_folder'])
@@ -325,7 +354,7 @@ class AppWindow():
             if confirm:
                 os.remove(self.filename)
                 del self.settings['most_recent']
-                self.dirty = False
+                self.is_dirty(False)
                 self.fileopen = False
                 self.filename = ""
                 self.image = None
@@ -336,7 +365,7 @@ class AppWindow():
             messagebox.showerror("I'm confused", "No file open")
 
     def file_previous(self, event=None):  # The event is received if executed via the key binding
-        if self.dirty:
+        if self.is_dirty():
             if messagebox.askyesno("Changes made", f"Save changes to {self.filename}?"):
                 self.file_save()
         images_in_folder = self.get_images_in_folder(self.settings['default_folder'])
@@ -379,7 +408,7 @@ class AppWindow():
                 draw = ImageDraw.Draw(self.image, 'RGBA')
                 draw.rectangle((0,0,self.properties['dimensions'][0],self.active_tool_data['crop_start_y']-1), fill="#00000080")
                 draw.rectangle((0,0,self.active_tool_data['crop_start_x']-1,self.properties['dimensions'][1]), fill="#00000080")
-                self.dirty = True
+                self.is_dirty(True)
                 self.active_tool_data['ButtonPress'] = True
                 print(self.active_tool_data)
             elif str(event.type) == "ButtonRelease" and 'ButtonPress' in self.active_tool_data:
@@ -415,6 +444,7 @@ class AppWindow():
             self.window.bind('<ButtonRelease-1>', self.crop)
             self.active_tool = "crop"
             self.active_tool_data = {}
+            
 
     def crop(self, event=None): # Keyboard control
         if self.image is None:
@@ -445,7 +475,7 @@ class AppWindow():
         if event is None or (str(event.type)=="KeyPress" and event.state==4 and event.keysym=="c"): 
             print('Crop button')
             self.add_to_history()
-            self.dirty = True
+            self.is_dirty(True)
             if self.image.size[0] > self.image.size[1]: # Image is landscape orientation
                 y = 0
                 h = self.image.size[1] # Full height
@@ -458,6 +488,7 @@ class AppWindow():
                 y = int(self.image.size[1] / 2) - int(h/2)
             self.active_tool = "crop"
             self.active_tool_data = {'x':x, 'y':y, 'w':w, 'h':h}
+            self.active_tool_text.config(text="crop")
             self.crop_tool_original_image = self.image.copy()
             add_crop_mask(self.image, self.active_tool_data['x'],self.active_tool_data['y'],self.active_tool_data['w'],self.active_tool_data['h'])
             self.show_image()
@@ -507,25 +538,27 @@ class AppWindow():
                 self.image = self.crop_tool_original_image.copy()
                 self.image = self.image.crop((self.active_tool_data['x'],self.active_tool_data['y'],self.active_tool_data['x']+self.active_tool_data['w'],self.active_tool_data['y']+self.active_tool_data['h']))
                 self.active_tool = ""
+                self.active_tool_text.config(text="          ")
                 self.active_tool_data = {}
             elif event.keysym == "Escape":
                 self.undo()
                 self.active_tool = ""
                 self.active_tool_data = {}
+                self.active_tool_text.config(text="          ")
             self.show_image()
 
     def rotate_left(self):
         if self.image is not None:
             self.add_to_history()
             self.image = self.image.rotate(90, expand=True)
-            self.dirty = True
+            self.is_dirty(True)
             self.show_image()
 
     def rotate_right(self, event=None):
         if self.image is not None:
             self.add_to_history()
             self.image = self.image.rotate(-90, expand=True)
-            self.dirty = True
+            self.is_dirty(True)
             self.show_image()
     
     def text(self):
@@ -557,7 +590,7 @@ class AppWindow():
             self.image = self.history.pop(-1)
             self.show_image()
         if len(self.history) == 0:
-            self.dirty = False
+            self.is_dirty(False)
 
     def add_to_history(self):
         self.history.append(self.image.copy())

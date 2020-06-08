@@ -11,7 +11,7 @@ Simple image editing application
 Cropping tool
 
  * Control-C ---> Start crop tool
- * a/d/s/w ---> Move cropping square within frame
+ * Left/Right/Up/Down ---> Move cropping square within frame
  * +/- --> Enlarge/reduce cropping square
  * Return --> Lock in crop
 
