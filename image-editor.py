@@ -2,7 +2,7 @@
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox, filedialog, simpledialog
-import os
+import os, sys
 import pickle
 # 3rd party package imports
 from PIL import Image, ImageTk, ImageDraw, ImageFont
@@ -48,6 +48,13 @@ class AppWindow():
         self.properties_frame = tk.Frame(self.window)
         self.properties_frame.place(x=dimensions[0]-216, y=dimensions[1]-48, width=216, height=48)
         self.properties_frame.config(background=TOOLS_BACKGROUND)
+        # Set application path global (used for pyinstaller) 
+        # From https://stackoverflow.com/a/404750
+        if getattr(sys, 'frozen', False):
+            self.application_path = os.path.dirname(sys.executable)
+        elif __file__:
+            self.application_path = os.path.dirname(__file__)
+        # Setup remaining elements
         self.load_assets()
         self.generate_menu()
         self.generate_toolbar(self.toolbar_frame)
@@ -66,23 +73,53 @@ class AppWindow():
         self.active_tool = ""
         self.active_tool_data = {}
         # Key bindings
-        self.window.bind('<Left>', self.file_previous)
-        self.window.bind('<Right>', self.file_next)
-        self.window.bind_all('<Control-Key-z>', self.undo)
-        self.window.bind_all('<Control-Key-s>', self.file_save)
-        self.window.bind('<Control-Key-r>', self.rotate_right)
-        self.window.bind('<Control-Key-c>', self.crop)
-        self.window.bind('<Key-a>', self.crop)
-        self.window.bind('<Key-s>', self.crop)
-        self.window.bind('<Key-d>', self.crop)
-        self.window.bind('<Key-w>', self.crop)
-        self.window.bind('<Key-plus>', self.crop)
-        self.window.bind('<Key-minus>', self.crop)
-        self.window.bind('<Return>', self.crop)
+        self.window.bind('<Left>', self.keyboard_handler)
+        self.window.bind('<Right>', self.keyboard_handler)
+        self.window.bind('<Control-Key-Left>', self.keyboard_handler)
+        self.window.bind('<Control-Key-Right>', self.keyboard_handler)
+        self.window.bind('<Control-Key-z>', self.keyboard_handler)
+        self.window.bind('<Control-Key-s>', self.keyboard_handler)
+        self.window.bind('<Control-Key-q>', self.keyboard_handler)
+        self.window.bind('<Control-Key-c>', self.keyboard_handler)
+        self.window.bind('<Escape>', self.keyboard_handler)
+        self.window.bind('<Up>', self.keyboard_handler)
+        self.window.bind('<Down>', self.keyboard_handler)
+        self.window.bind('<Key-plus>', self.keyboard_handler)
+        self.window.bind('<Key-minus>', self.keyboard_handler)
+        self.window.bind('<Return>', self.keyboard_handler)
         # Open most recent file
         if "most_recent" in self.settings:
             self.file_open(self.settings['most_recent'])
-
+    
+    def keyboard_handler(self, event):
+        # List of .keysym names @ https://anzeljg.github.io/rin2/book2/2405/docs/tkinter/key-names.html
+        # Is Control key pressed?
+        ctrl  = (event.state & 0x4) != 0 # https://stackoverflow.com/a/34482048
+        # What tool do we forward the keystroke event to?
+        if self.active_tool == "crop":
+            self.crop(event)
+        else: # No active tool
+            print(event, event.state)
+            if str(event.type) == "KeyPress" and event.keysym == "Left" and ctrl:
+                self.rotate_left()
+            elif str(event.type) == "KeyPress" and event.keysym == "Left":
+                self.file_previous()
+            elif str(event.type) == "KeyPress" and event.keysym == "Right" and ctrl:
+                self.rotate_right()
+            elif str(event.type) == "KeyPress" and event.keysym == "Right":
+                self.file_next()
+            elif str(event.type) == "KeyPress" and event.keysym == "c" and ctrl:
+                self.crop()
+            elif str(event.type) == "KeyPress" and event.keysym == "s" and ctrl:
+                self.file_save()
+            elif str(event.type) == "KeyPress" and event.keysym == "z" and ctrl:
+                self.undo()
+            elif str(event.type) == "KeyPress" and event.keysym == "q" and ctrl:
+                if self.dirty:
+                    if messagebox.askyesno("Changes made", f"Save changes to {self.filename} before closing?"):
+                        self.file_save()
+                quit()
+            
     def get_images_in_folder(self, folder):
         files = os.listdir(folder)
         image_files = []
@@ -105,29 +142,31 @@ class AppWindow():
             pickle.dump(self.settings, f)
     
     def load_assets(self):
+        if not os.path.exists(os.path.join(self.application_path, "assets/icons8-back-50.png")):
+            messagebox.showerror("Sorry", f"Asset files not found! Can not continue.\n\nThe /assets folder must be in the same folder containing the executable.")
+            exit()
         try:
-            # PyInstaller creates a temp folder and stores path in _MEIPASS
-            base_path = sys._MEIPASS
-        except Exception:
-            base_path = os.path.abspath(".")
-        self.icons = {
-            "previous" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-back-50.png")),
-            "crop" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-crop-50.png")),
-            "delete" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-delete-bin-50.png")),
-            "erase" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-erase-50.png")),
-            "fill-color" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-fill-color-50.png")),
-            "next" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-forward-50.png")),
-            "line" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-line-50.png")),
-            "ellipse" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-oval-50.png")),
-            "paint" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-paint-palette-50.png")),
-            "pen" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-pen-50.png")),
-            "rectangle" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-rectangular-50.png")),
-            "resize" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-resize-50.png")),
-            "save" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-save-50.png")),
-            "text" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-text-box-50.png")),
-            "rotate-left" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-rotate-left-50.png")),
-            "rotate-right" : tk.PhotoImage(file=os.path.join(base_path, "assets/icons8-rotate-right-50.png"))
-        }
+            self.icons = {
+                "previous" : tk.PhotoImage(file=os.path.join(self.application_path, "assets/icons8-back-50.png")),
+                "crop" : tk.PhotoImage(file=os.path.join(self.application_path, "assets/icons8-crop-50.png")),
+                "delete" : tk.PhotoImage(file=os.path.join(self.application_path, "assets/icons8-delete-bin-50.png")),
+                "erase" : tk.PhotoImage(file=os.path.join(self.application_path, "assets/icons8-erase-50.png")),
+                "fill-color" : tk.PhotoImage(file=os.path.join(self.application_path, "assets/icons8-fill-color-50.png")),
+                "next" : tk.PhotoImage(file=os.path.join(self.application_path, "assets/icons8-forward-50.png")),
+                "line" : tk.PhotoImage(file=os.path.join(self.application_path, "assets/icons8-line-50.png")),
+                "ellipse" : tk.PhotoImage(file=os.path.join(self.application_path, "assets/icons8-oval-50.png")),
+                "paint" : tk.PhotoImage(file=os.path.join(self.application_path, "assets/icons8-paint-palette-50.png")),
+                "pen" : tk.PhotoImage(file=os.path.join(self.application_path, "assets/icons8-pen-50.png")),
+                "rectangle" : tk.PhotoImage(file=os.path.join(self.application_path, "assets/icons8-rectangular-50.png")),
+                "resize" : tk.PhotoImage(file=os.path.join(self.application_path, "assets/icons8-resize-50.png")),
+                "save" : tk.PhotoImage(file=os.path.join(self.application_path, "assets/icons8-save-50.png")),
+                "text" : tk.PhotoImage(file=os.path.join(self.application_path, "assets/icons8-text-box-50.png")),
+                "rotate-left" : tk.PhotoImage(file=os.path.join(self.application_path, "assets/icons8-rotate-left-50.png")),
+                "rotate-right" : tk.PhotoImage(file=os.path.join(self.application_path, "assets/icons8-rotate-right-50.png"))
+            }
+        except:
+            messagebox.showerror("Sorry", f"One or more asset files not found! Can not continue.")
+            exit()
 
     def generate_toolbar(self, target):
         self.toolbar_buttons = [
@@ -424,28 +463,28 @@ class AppWindow():
             self.show_image()
         elif event is not None and self.active_tool == "crop": # Key press
             print(event)
-            if str(event.type) == "KeyPress" and event.char == 'a': # Move left
+            if str(event.type) == "KeyPress" and event.keysym == 'Left': # Move left
                 if self.active_tool_data['x'] > step:
                     self.active_tool_data['x'] -= step
                 else:
                     self.active_tool_data['x'] = 0
                 self.image = self.crop_tool_original_image.copy()
                 add_crop_mask(self.image, self.active_tool_data['x'],self.active_tool_data['y'],self.active_tool_data['w'],self.active_tool_data['h'])
-            elif str(event.type) == "KeyPress" and event.char == 's': # Move down
+            elif str(event.type) == "KeyPress" and event.keysym == 'Down': # Move down
                 if self.active_tool_data['y']+self.active_tool_data['h']+step < self.image.size[1]:
                     self.active_tool_data['y'] += step
                 else:
                     self.active_tool_data['y'] = self.image.size[1] - self.active_tool_data['h']
                 self.image = self.crop_tool_original_image.copy()
                 add_crop_mask(self.image, self.active_tool_data['x'],self.active_tool_data['y'],self.active_tool_data['w'],self.active_tool_data['h'])
-            elif str(event.type) == "KeyPress" and event.char == 'd': # Move right
+            elif str(event.type) == "KeyPress" and event.keysym == 'Right': # Move right
                 if self.active_tool_data['x']+self.active_tool_data['w']+step < self.image.size[0]:
                     self.active_tool_data['x'] += step
                 else:
                     self.active_tool_data['x'] = self.image.size[0] - self.active_tool_data['w']
                 self.image = self.crop_tool_original_image.copy()
                 add_crop_mask(self.image, self.active_tool_data['x'],self.active_tool_data['y'],self.active_tool_data['w'],self.active_tool_data['h'])
-            elif str(event.type) == "KeyPress" and event.char == 'w': # Move up
+            elif str(event.type) == "KeyPress" and event.keysym == 'Up': # Move up
                 if self.active_tool_data['y'] > step:
                     self.active_tool_data['y'] -= step
                 else:
@@ -467,6 +506,10 @@ class AppWindow():
             elif str(event.type) == "KeyPress" and event.keysym == "Return": # Finalise the cropping
                 self.image = self.crop_tool_original_image.copy()
                 self.image = self.image.crop((self.active_tool_data['x'],self.active_tool_data['y'],self.active_tool_data['x']+self.active_tool_data['w'],self.active_tool_data['y']+self.active_tool_data['h']))
+                self.active_tool = ""
+                self.active_tool_data = {}
+            elif event.keysym == "Escape":
+                self.undo()
                 self.active_tool = ""
                 self.active_tool_data = {}
             self.show_image()
