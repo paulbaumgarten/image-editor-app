@@ -596,7 +596,6 @@ class AppWindow():
         self.history.append(self.image.copy())
 
     def revert(self):
-        messagebox.showerror("Sorry", "Feature not yet implemented :-/")
         while len(self.history) > 0:
             self.undo()
 
